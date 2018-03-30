@@ -1,0 +1,54 @@
+--- SchedulerNP-new-original.c	2017-04-20 16:28:04.000000000 +0200
++++ SchedulerNP-new.c	2018-03-26 18:07:40.580315350 +0200
+@@ -48,8 +48,7 @@
+ #include "Scheduler.h"
+ 
+ Task Tasks[NUMTASKS];           /* Lower indices: lower priorities           */
+-uint8_t Pending = 0;            /* Indicates if there is a pending task      */ 
+-
++int8_t HPrioPendingTasks = -1;            /* Indicates if there is a pending task      */ 
+ uint16_t IntDisable (void)
+ {
+   uint16_t sw;
+@@ -120,11 +119,14 @@
+   
+ void HandleTasks (void)
+ { 
+-  while (Pending) {
+-    int8_t i=NUMTASKS-1; Pending = 0;
+-    while (i>=0 && !Pending) {
++  while (HPrioPendingTasks >= 0) {
++	uint16_t sw = IntDisable();
++	int8_t i=HPrioPendingTasks; HPrioPendingTasks = -1;
++	RestoreSW(sw);
++	_EINT();
++	while (i>=0 && i>HPrioPendingTasks) {
+       Taskp t = &Tasks[i];
+-      if (t->Activated != t->Invoked) {
++	  if (t->Activated != t->Invoked) {
+         if (t->Flags & TRIGGERED) {
+           t->Taskf(); t->Invoked++; 
+         }
+@@ -139,14 +141,16 @@
+   do {
+     Taskp t = &Tasks[i];
+     if (t->Flags & TRIGGERED) { // countdown
+-      if (t->Remaining-- == 0) {
+-        t->Remaining = t->Period-1; 
+-        t->Activated++;
+-  	Pending = 1;
+-      }
++       if (t->Remaining-- == 0) {
++          t->Remaining = t->Period-1; 
++          t->Activated++;
++		  if(i>HPrioPendingTasks){
++			HPrioPendingTasks = i;  
++		  }
++		}
+     }
+   } while (i--);
+-  if (Pending) ExitLowPowerMode3();
++  if (HPrioPendingTasks>=0) ExitLowPowerMode3();
+ }
+ 
+ #endif
